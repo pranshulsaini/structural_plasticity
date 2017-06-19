@@ -2,13 +2,11 @@
 
 import math
 import cmath
-import numpy
 import matplotlib.pyplot as pl
 import sys
 from scipy.optimize import curve_fit
 import numpy as np
 import pylab
-import brian2
 from brian2 import *
 
 def gaussian(x, mu, sig):
@@ -41,7 +39,7 @@ def wrap_gaussian(x, mu, sig):
     return gauss
 
 
-def middlesort(foo):
+def middlesort(foo): # I don't rememmber now where it will be used
 
     foo = numpy.sort(foo)
     length = len(foo)
@@ -117,8 +115,7 @@ class stdp_class:
         self.nodes_e = None
         self.nodes_i = None
 
-        self.v_rest_e = -65 * mV
-        self.v_rest_i = -60 * mV
+
         self.v_reset_e = -65. * mV
         self.v_reset_i = -45. * mV
         self.v_thresh_e = -52. * mV
@@ -127,21 +124,22 @@ class stdp_class:
         self.refrac_i = 2. * ms
 
 
-
+        #Below are the variables to be used in the equations
         #I have not put wt_inp_i = 0.15 and wt_e_e = 0.03
-
-        self.tc_pre_ee = 20 * ms
-        self.tc_post_ee = 40 * ms
-        self.tc_pre_ie = 20 * ms
-        self.tc_post_ie = 20 *ms
-        self.nu_pre_ee = 0.0005  # learning rate -- decrease for exc->exc
-        self.nu_post_ee = 0.0025  # learning rate -- increase for exc->exc
-        self.nu_ie = 0.005  # learning rate -- for inh->exc
-        self.alpha_ie = 3 * Hz * self.tc_post_ie * 2  # controls the firing rate
-        self.wmax_ee = 0.5
-        self.wmax_ie = 1000.
-        self.exp_pre_ee = 0.2
-        self.exp_post_ee = self.exp_pre_ee
+        v_rest_e = -65 * mV  # using self is causing problems in equations
+        v_rest_i = -60 * mV
+        tc_pre_ee = 20 * ms
+        tc_post_ee = 40 * ms
+        tc_pre_ie = 20 * ms
+        tc_post_ie = 20 *ms
+        nu_pre_ee = 0.0005  # learning rate -- decrease for exc->exc
+        nu_post_ee = 0.0025  # learning rate -- increase for exc->exc
+        nu_ie = 0.005  # learning rate -- for inh->exc
+        alpha_ie = 3 * Hz * tc_post_ie * 2  # controls the firing rate
+        wmax_ee = 0.5
+        wmax_ie = 1000.
+        exp_pre_ee = 0.2
+        exp_post_ee = exp_pre_ee
 
         self.delay_inp_e = None
         self.delay_inp_i = None
@@ -150,60 +148,60 @@ class stdp_class:
         self.delay_i_e = None
         self.delay_i_i = None
 
-        self.neuron_eqs_e = '''
-                dv/dt = ((self.v_rest_e-v) + (I_synE+I_synI) / nS) / (20*ms)  : volt
+        self.neuron_eqs_e ="""
+                dv/dt = ((v_rest_e-v) + (I_synE+I_synI) / nS) / (20*ms)  : volt
+                dge/dt = -ge/(5.0*ms)                                   : 1
+                dgi/dt = -gi/(10.0*ms)                                  : 1
                 I_synE = ge * nS * -v                                   : amp
                 I_synI = gi * nS * (-85.*mV-v)                          : amp
+                """
+
+        self.neuron_eqs_i = """
+                dv/dt = ((v_rest_i-v) + (I_synE+I_synI) / nS) / (10*ms)  : volt
                 dge/dt = -ge/(5.0*ms)                                   : 1
                 dgi/dt = -gi/(10.0*ms)                                  : 1
-                '''
-
-        self.neuron_eqs_i = '''
-                dv/dt = ((self.v_rest_i-v) + (I_synE+I_synI) / nS) / (10*ms)  : volt
-                I_synE = ge * nS * -v                           : amp
+                I_synE = ge * nS * -v                                  : amp
                 I_synI = gi * nS * (-85.*mV-v)                          : amp
-                dge/dt = -ge/(5.0*ms)                                   : 1
-                dgi/dt = -gi/(10.0*ms)                                  : 1
-                '''
+                """
 
-        self.eqs_stdp_ee = '''
+        self.eqs_stdp_ee = """
                 w : 1  
-                postbefore                        : 1.0
-                dpre/dt   =   -pre/(self.tc_pre_ee)       : 1.0 (event-driven)
-                dpost/dt = -post/(self.tc_post_ee)     : 1.0 (event-driven)
-                '''
-        self.eqs_stdp_ie = '''
+                postbefore                        : 1
+                dpre/dt   =   -pre/(tc_pre_ee)       : 1 (event-driven)
+                dpost/dt = -post/(tc_post_ee)     : 1 (event-driven)
+                """
+        self.eqs_stdp_ie = """
                 w : 1
-                dpre/dt   =  -pre/(self.tc_pre_ie)        : 1.0 (event-driven)
-                dpost/dt  = -post/(self.tc_post_ie)       : 1.0 (event-driven)
-                '''
+                dpre/dt   =  -pre/(tc_pre_ie)        : 1 (event-driven)
+                dpost/dt  = -post/(tc_post_ie)       : 1 (event-driven)
+                """
         # added the conductance change and weight clipping below
-        self.eqs_STDP_pre_ee = '''
+        self.eqs_STDP_pre_ee = """
                 ge = ge + w
                 pre = 1.
-                w -= self.nu_pre_ee * post * w**self.exp_pre_ee
-                w = clip(w, 0, self.wmax_ee)
-                '''
+                w -= nu_pre_ee * post * w**exp_pre_ee
+                w = clip(w, 0, wmax_ee)
+                """
 
-        self.eqs_STDP_post_ee = '''
+        self.eqs_STDP_post_ee = """
                 postbefore = post
-                w += self.nu_post_ee * pre * postbefore * (wmax_ee - w)**exp_post_ee
+                w += nu_post_ee * pre * postbefore * (wmax_ee - w)**exp_post_ee
                 post = 1.
-                w = clip(w, 0, self.wmax_ee)
-                '''
+                w = clip(w, 0, wmax_ee)
+                """
         #The equations below were not mentioned in the paper
-        self.eqs_STDP_pre_ie ='''
+        self.eqs_STDP_pre_ie ="""
                 gi =  gi + w
                 pre += 1.
-                w += self.nu_ie * (post-self.alpha_ie)
-                w = clip(w, 0, self.wmax_ie)
-                '''
+                w += nu_ie * (post-alpha_ie)
+                w = clip(w, 0, wmax_ie)
+                """
 
-        self.eqs_STDP_post_ie ='''
+        self.eqs_STDP_post_ie ="""
                 post += 1.
-                w += self.nu_ie * pre
-                w = clip(w, 0, self.wmax_ie)
-                '''
+                w += nu_ie * pre
+                w = clip(w, 0, wmax_ie)
+                """
 
 
     def prepare_simulation(self):
@@ -213,7 +211,7 @@ class stdp_class:
 
     def create_nodes(self):
         self.nodes_inp = PoissonGroup(self.number_input_neurons, self.bg_rate)
-        self.nodes_e = NeuronGroup(self.number_excitatory_neurons, self.neuron_eqs_e, threshold= 'v>self.v_thresh_e', refractory= self.refrac_e, reset= 'v = self.v_reset_e')
+        self.nodes_e = NeuronGroup(self.number_excitatory_neurons, self.neuron_eqs_e, threshold= 'v>self.v_thresh_e', refractory= self.refrac_e, reset= 'v = self.v_reset_i')
         self.nodes_i = NeuronGroup(self.number_inhibitory_neurons, self.neuron_eqs_i, threshold= 'v>self.v_thresh_i', refractory= self.refrac_i, reset= 'v = self.v_reset_i')
 
     def connections(self):
@@ -228,8 +226,8 @@ class stdp_class:
             self.wt_inp_e = np.random.rand(160)        # unformly distributed random numbers between 0 and 1
             k = 0
             for i in pos_inp_e:
-                S_inp_e.w[i][j] = self.wt_inp_e[k]   # weights have to be between 0 and 1
-                S_inp_e.delay[i][j] =  self.delay_inp_e[k]
+                S_inp_e.w[i,j] = self.wt_inp_e[k]   # weights have to be between 0 and 1
+                S_inp_e.delay[i,j] =  self.delay_inp_e[k]
                 k = k+1
 
         #input population to inhibitory neurons.
@@ -241,8 +239,8 @@ class stdp_class:
             self.wt_inp_i = (1./5)*np.random.rand(160)  # unformly distributed random numbers between 0 and 0.2
             k = 0
             for i in pos_inp_i:
-                S_inp_i.w[i][j] = self.wt_inp_i[k]  # weights have to be between 0 and 1
-                S_inp_i.delay[i][j] = self.delay_inp_i[k]
+                S_inp_i.w[i,j] = self.wt_inp_i[k]  # weights have to be between 0 and 1
+                S_inp_i.delay[i,j] = self.delay_inp_i[k]
                 k = k + 1
 
 
@@ -257,8 +255,8 @@ class stdp_class:
             for i in pos_e_e:
                 if (i == j):  # to avoid the recurrent connections. There will be no error but one weight will get waste
                     i = i +1
-                S_e_e.w[i][j] = self.wt_e_e[k]  # weights have to be between 0 and 1
-                S_e_e.delay[i][j] = self.delay_e_e[k]
+                S_e_e.w[i,j] = self.wt_e_e[k]  # weights have to be between 0 and 1
+                S_e_e.delay[i,j] = self.delay_e_e[k]
                 k = k + 1
 
 
@@ -271,8 +269,8 @@ class stdp_class:
             self.wt_e_i = (1./5)*np.random.rand(160)  # unformly distributed random numbers between 0 and 1
             k = 0
             for i in pos_e_i:
-                S_e_i.w[i][j] = self.wt_e_i[k]  # weights have to be between 0 and 1
-                S_e_i.delay[i][j] = self.delay_e_i[k]
+                S_e_i.w[i,j] = self.wt_e_i[k]  # weights have to be between 0 and 1
+                S_e_i.delay[i,j] = self.delay_e_i[k]
                 k = k + 1
 
         # connections from inhibitory population to excitatory population.
@@ -284,8 +282,8 @@ class stdp_class:
             self.wt_i_e = np.random.rand(40)  # unformly distributed random numbers between 0 and 1
             k = 0
             for i in pos_i_e:
-                S_i_e.w[i][j] = self.wt_i_e[k]  # weights have to be between 0 and 1
-                S_i_e.delay[i][j] = self.delay_i_e[k]
+                S_i_e.w[i,j] = self.wt_i_e[k]  # weights have to be between 0 and 1
+                S_i_e.delay[i,j] = self.delay_i_e[k]
 
          # connections from inhibitory population to inhibitory population.
         S_i_i = Synapses(self.nodes_i, self.nodes_i, model=self.eqs_stdp_ie, on_pre=self.eqs_STDP_pre_ie,  on_post = self.eqs_STDP_post_ie)
@@ -298,8 +296,8 @@ class stdp_class:
             for i in pos_i_i:
                 if (i == j):
                     i = i +1
-                S_i_e.w[i][j] = self.wt_i_i[k]  # weights have to be between 0 and 1
-                S_i_e.delay[i][j] = self.delay_i_i[k]
+                S_i_e.w[i,j] = self.wt_i_i[k]  # weights have to be between 0 and 1
+                S_i_e.delay[i,j] = self.delay_i_i[k]
 
         # to record the spikes from the excitaory neurosn of computation population.
         self.spikedetector = SpikeMonitor(self.nodes_e)
@@ -386,5 +384,3 @@ if __name__ == '__main__':
     #stdp_case.plot_data1()
     #stdp_case.plot_data2()
     #stdp_case.plot_data3()
-
-    # creating a population of inhibitory and excitatory neurons
