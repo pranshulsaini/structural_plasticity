@@ -1,5 +1,3 @@
-#no structural plasticity in this code. Only stdp synapses. The output should stabilise to input gaussian pattern after some time
-
 import math
 import cmath
 import matplotlib.pyplot as pl
@@ -40,7 +38,6 @@ def wrap_gaussian(x, mu, sig):
 
 
 def middlesort(foo): # I don't rememmber now where it will be used
-
     foo = numpy.sort(foo)
     length = len(foo)
     l = length
@@ -124,7 +121,7 @@ class stdp_class:
         self.refrac_i = 2. * ms
 
 
-        #Below are the variables to be used in the equations
+        #Below are the variables to be used in the equations. I have reduced self.___ because that was causing problems
         #I have not put wt_inp_i = 0.15 and wt_e_e = 0.03
         v_rest_e = -65 * mV  # using self is causing problems in equations
         v_rest_i = -60 * mV
@@ -160,7 +157,7 @@ class stdp_class:
                 dv/dt = ((v_rest_i-v) + (I_synE+I_synI) / nS) / (10*ms)  : volt
                 dge/dt = -ge/(5.0*ms)                                   : 1
                 dgi/dt = -gi/(10.0*ms)                                  : 1
-                I_synE = ge * nS * -v                                  : amp
+                I_synE = ge * nS * -v                                   : amp
                 I_synI = gi * nS * (-85.*mV-v)                          : amp
                 """
 
@@ -189,7 +186,7 @@ class stdp_class:
                 post = 1.
                 w = clip(w, 0, wmax_ee)
                 """
-        #The equations below were not mentioned in the paper
+        #The equations below were not mentioned in the paper. Robin also does not know the reference
         self.eqs_STDP_pre_ie ="""
                 gi =  gi + w
                 pre += 1.
@@ -221,7 +218,7 @@ class stdp_class:
         S_inp_e = Synapses(self.nodes_inp, self.nodes_e, model=self.eqs_stdp_ee, on_pre=self.eqs_STDP_pre_ee, on_post = self.eqs_STDP_post_ee)
         S_inp_e.connect()  # all to all connections except to itself
         for j in range(0,1600):
-            pos_inp_e =  np.random.randint(0,1600,160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
+            pos_inp_e = np.random.randint(0,1600,160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
             self.delay_inp_e = (10 * ms - 0 * ms) * np.random.random(160) + 0 * ms
             self.wt_inp_e = np.random.rand(160)        # unformly distributed random numbers between 0 and 1
             k = 0
@@ -274,7 +271,7 @@ class stdp_class:
                 k = k + 1
 
         # connections from inhibitory population to excitatory population.
-        S_i_e = Synapses(self.nodes_e, self.nodes_i, model=self.eqs_stdp_ie, on_pre=self.eqs_STDP_pre_ie,  on_post = self.eqs_STDP_post_ie)
+        S_i_e = Synapses(self.nodes_i, self.nodes_e, model=self.eqs_stdp_ie, on_pre=self.eqs_STDP_pre_ie,  on_post = self.eqs_STDP_post_ie)
         S_i_e.connect()  # all to all connections
         for j in range(0, 1600):
             pos_i_e = np.random.randint(0, 400, 40)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
@@ -287,7 +284,7 @@ class stdp_class:
 
          # connections from inhibitory population to inhibitory population.
         S_i_i = Synapses(self.nodes_i, self.nodes_i, model=self.eqs_stdp_ie, on_pre=self.eqs_STDP_pre_ie,  on_post = self.eqs_STDP_post_ie)
-        S_i_i.connect()  # all to all connections
+        S_i_i.connect('i !=j')  # all to all connections
         for j in range(0, 400):
             pos_i_i = np.random.randint(0, 400, 40)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
             self.delay_i_i = (5 * ms - 0 * ms) * np.random.random(40) + 0 * ms
@@ -304,7 +301,7 @@ class stdp_class:
 
     def record_spikes(self):
         for i in range(1600):
-            self.spikes[i] = len(self.spikedetector.all_values()['t'][i])
+            self.spikes[i] = len(self.spikedetector.spike_trains()[i])   # stores the times of the spikes of neuron with index i
         self.new_spikes = self.spikes
         self.spikes = self.spikes - self.old_spikes
         print ('The total number of new spikes of the population are', np.sum(self.spikes))
@@ -337,40 +334,30 @@ class stdp_class:
                 print("Progress: " + str(i / 2) + "%")
 
             if (j == 9):         # happens after 10 * 25 ms = 250  ms        Input is changed now
-                self.bg_rate = 20. * wrap_gaussian(self.xdata, self.mu_input, np.random.random())
-                stdp_case.plot_data1()
-                stdp_case.plot_data2()
-                stdp_case.plot_data3()
-                j = 0
-
+                self.bg_rate = 20. * wrap_gaussian(self.xdata, np.random.random(), self.sigma_input )
+                stdp_case.plot_data1(step)
+                stdp_case.plot_data2(step)
+                j = -1   # because 1 will be added to it in the next line
             j = j +1
         print("Simulation finished successfully")
 
 
-    def plot_data1(self):
+    def plot_data1(self,step):
         fig, ax1 = pl.subplots()
         #ax1.set_ylim([0, 0.275])
         ax1.set_xlabel("Number of iterations")
         ax1.set_ylabel("Noise value")
         ax1.plot(self.noise, 'm', label='Noise', linewidth=2.0, linestyle='--')
-        pl.savefig('stdpNoise.eps', format='eps')
+        pl.savefig('stdpNoise'+str(step) +'.eps', format='eps')
 
 
-    def plot_data2(self):
+    def plot_data2(self, step):
         fig, ax2 = pl.subplots()
         ax2.set_xlabel("Number of neurons")
         ax2.set_ylabel("Firing rate")
         ax2.plot(self.firing_rate, 'b', label='Noise', linewidth=2.0, linestyle='--')
         ax2.plot(self.bg_rate, 'r', label='Noise', linewidth=2.0, linestyle='--')
-        pl.savefig('stdpfiringrate.eps', format='eps')
-
-    def plot_data3(self):
-        fig, ax3 = pl.subplots()
-        ax3.set_xlabel("Number of neurons")
-        ax3.set_ylabel("Fitted Firing Rate")
-        ax3.plot(self.y_fit, 'b', label='Noise', linewidth=2.0, linestyle='--')
-        ax3.plot(self.bg_rate, 'r', label='Noise', linewidth=2.0, linestyle='--')
-        pl.savefig('stdpfittedfiringrate.eps', format='eps')
+        pl.savefig('stdpfiringrate'+str(step) +'.eps', format='eps')
 
 
 if __name__ == '__main__':
