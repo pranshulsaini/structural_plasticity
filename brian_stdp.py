@@ -64,22 +64,23 @@ def middlesort(foo): # I don't rememmber now where it will be used
     return fooo
 
 
-def simulate(t_sim, record_interval, input_change_interval, xdata, sigma_input,bg_rate, firing_rate, spikes, spikedetector,new_spikes, old_spikes, noise):
+def simulate(t_sim, record_interval, input_change_interval, xdata, sigma_input, bg_rate, firing_rate, spikes, spikedetector, new_spikes, old_spikes, noise):
     print("Starting simulation")
 
-    sim_steps = numpy.arange(0, t_sim, record_interval)  # for training phase
+    sim_steps = numpy.arange(0, t_sim, record_interval)  # for training phase  25 ms
     j = 0
+    k = 1
     for i, step in enumerate(sim_steps):
-        run(input_change_interval)  # simulates the network for the time in the arguments. The argument here is for the training phase
+        run(record_interval)  # simulates the network for the time in the arguments. The argument here is for the training phase
         record_spikes(spikes, spikedetector, new_spikes, old_spikes, firing_rate, record_interval)
         noise.append(noise_estimation(firing_rate, bg_rate))
-        if i % 20 == 0:  # happens every 20*1000 ms = 20s
-            print("Progress: " + str(i / 2) + "%")
 
-        if (j == 9):         # happens after 10 * 25 ms = 250  ms        Input is changed now
+        if (j == 9):         # happens after 10 * 25(recording interval) ms = 250  ms        Input mean is changed now
             bg_rate = 20. * wrap_gaussian(xdata, np.random.random(), sigma_input )
             plot_data1(step, noise)
             plot_data2(step, firing_rate, bg_rate)
+            print('example'+str(k)+'finished')
+            k = k +1
             j = -1   # because 1 will be added to it in the next line
 
         j = j +1
@@ -142,7 +143,7 @@ t_sim = 1000*250.0 *ms    # This training case. 1000 examples, each for 250ms. I
 # simulation step (ms).
 dt = 0.5 * ms
 #record time
-record_interval = 1000. *ms  # let's take 10 recordings per example
+record_interval = 25. *ms  # let's take 25ms gap between consecutive recordings
 
 #input change
 input_change_interval = 250.0 * ms
@@ -205,7 +206,7 @@ exp_post_ee = exp_pre_ee
 
 
 neuron_eqs_e ="""
-        dv/dt = ((v_rest_e-v) + (I_synE+I_synI) / nS) / (20*ms)  : volt
+        dv/dt = ((v_rest_e-v) + (I_synE+I_synI) / nS) / (20*ms) : volt
         dge/dt = -ge/(5.0*ms)                                   : 1
         dgi/dt = -gi/(10.0*ms)                                  : 1
         I_synE = ge * nS * -v                                   : amp
@@ -223,14 +224,16 @@ neuron_eqs_i = """
 eqs_stdp_ee = """
         w : 1  
         postbefore                        : 1
-        dpre/dt   =   -pre/(tc_pre_ee)       : 1 (event-driven)
+        dpre/dt   =   -pre/(tc_pre_ee)    : 1 (event-driven)
         dpost/dt = -post/(tc_post_ee)     : 1 (event-driven)
         """
+
 eqs_stdp_ie = """
         w : 1
         dpre/dt   =  -pre/(tc_pre_ie)        : 1 (event-driven)
         dpost/dt  = -post/(tc_post_ie)       : 1 (event-driven)
         """
+
 # added the conductance change and weight clipping below
 eqs_STDP_pre_ee = """
         ge = ge + w
@@ -245,6 +248,7 @@ eqs_STDP_post_ee = """
         post = 1.
         w = clip(w, 0, wmax_ee)
         """
+
 #The equations below were not mentioned in the paper. Robin also does not know the reference
 eqs_STDP_pre_ie ="""
         gi =  gi + w
@@ -272,85 +276,63 @@ nodes_i = NeuronGroup(number_inhibitory_neurons, neuron_eqs_i, threshold= 'v>v_t
 
 # input population to excitatory neurons.
 S_inp_e = Synapses(nodes_inp, nodes_e, model=eqs_stdp_ee, on_pre=eqs_STDP_pre_ee, on_post = eqs_STDP_post_ee)
-S_inp_e.connect()  # all to all connections except to itself
-for j in range(0,1600):
-    pos_inp_e = np.random.randint(0,1600,160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_inp_e = (10 * ms - 0 * ms) * np.random.random(160) + 0 * ms
-    wt_inp_e = np.random.rand(160)        # unformly distributed random numbers between 0 and 1
-    k = 0
-    for i in pos_inp_e:
-        S_inp_e.w[i,j] = wt_inp_e[k]   # weights have to be between 0 and 1
-        S_inp_e.delay[i,j] =  delay_inp_e[k]
-        k = k+1
+S_inp_e.connect(p= 0.1)  # all to all connections except to itself
+len_w = len(S_inp_e.w)
+delay_inp_e = (10 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_inp_e = np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_inp_e.w = wt_inp_e
+S_inp_e.delay = delay_inp_e
+
 
 #input population to inhibitory neurons.
 S_inp_i = Synapses(nodes_inp, nodes_i, model=eqs_stdp_ee, on_pre=eqs_STDP_pre_ee,  on_post = eqs_STDP_post_ee)
-S_inp_i.connect()  # all to all connections except to itself
-for j in range(0, 400):
-    pos_inp_i = np.random.randint(0, 1600, 160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_inp_i = (5 * ms - 0 * ms) * np.random.random(160) + 0 * ms
-    wt_inp_i = (1./5)*np.random.rand(160)  # unformly distributed random numbers between 0 and 0.2
-    k = 0
-    for i in pos_inp_i:
-        S_inp_i.w[i,j] = wt_inp_i[k]  # weights have to be between 0 and 1
-        S_inp_i.delay[i,j] = delay_inp_i[k]
-        k = k + 1
+S_inp_i.connect(p=0.1)  # all to all connections except to itself
+len_w = len(S_inp_i.w)
+delay_inp_i = (5 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_inp_i = (1./5)* np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_inp_i.w = wt_inp_i
+S_inp_i.delay = delay_inp_i
 
 
 #recurrent connections from excitatory neurons on itself.
 S_e_e = Synapses(nodes_e, nodes_e, model=eqs_stdp_ee, on_pre=eqs_STDP_pre_ee,  on_post = eqs_STDP_post_ee)
-S_e_e.connect('i !=j')  # all to all connections except to itself, Still I can go upon [1599,1599] but just can't change the diagonal elements
-for j in range(0, 1600):
-    pos_e_e = np.random.randint(0, 1600, 160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_e_e = (5 * ms - 0 * ms) * np.random.random(160) + 0 * ms
-    wt_e_e = (1./5)*np.random.rand(160)  # unformly distributed random numbers between 0 and 1
-    k = 0
-    for i in pos_e_e:
-        if (i == j):  # to avoid the recurrent connections. There will be no error but one weight will get waste
-            i = i +1
-        S_e_e.w[i,j] = wt_e_e[k]  # weights have to be between 0 and 1
-        S_e_e.delay[i,j] = delay_e_e[k]
-        k = k + 1
+S_e_e.connect(condition = 'i !=j', p = 0.1)  # all to all connections except to itself, Still I can go upon [1599,1599] but just can't change the diagonal elements
+len_w = len(S_e_e.w)
+delay_e_e = (5 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_e_e = (1./5)* np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_e_e.w = wt_e_e
+S_e_e.delay = delay_e_e
 
 
 # connections from excitatory population to inhibitory population.
 S_e_i = Synapses(nodes_e, nodes_i, model=eqs_stdp_ee, on_pre=eqs_STDP_pre_ee,  on_post = eqs_STDP_post_ee)
-S_e_i.connect()  # all to all connections
-for j in range(0, 400):
-    pos_e_i = np.random.randint(0, 1600, 160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_e_i = (2 * ms - 0 * ms) * np.random.random(160) + 0 * ms
-    wt_e_i = (1./5)*np.random.rand(160)  # unformly distributed random numbers between 0 and 1
-    k = 0
-    for i in pos_e_i:
-        S_e_i.w[i,j] = wt_e_i[k]  # weights have to be between 0 and 1
-        S_e_i.delay[i,j] = delay_e_i[k]
-        k = k + 1
+S_e_i.connect(p = 0.1)  # all to all connections
+len_w = len(S_e_i.w)
+delay_e_i = (2 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_e_i = (1./5)* np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_e_i.w = wt_e_i
+S_e_i.delay = delay_e_i
+
 
 # connections from inhibitory population to excitatory population.
 S_i_e = Synapses(nodes_i, nodes_e, model=eqs_stdp_ie, on_pre=eqs_STDP_pre_ie,  on_post = eqs_STDP_post_ie)
-S_i_e.connect()  # all to all connections
-for j in range(0, 1600):
-    pos_i_e = np.random.randint(0, 400, 40)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_i_e = (1 * ms - 0 * ms) * np.random.random(40) + 0 * ms
-    wt_i_e = np.random.rand(40)  # unformly distributed random numbers between 0 and 1
-    k = 0
-    for i in pos_i_e:
-        S_i_e.w[i,j] = wt_i_e[k]  # weights have to be between 0 and 1
-        S_i_e.delay[i,j] = delay_i_e[k]
+S_i_e.connect(p = 0.1)  # all to all connections
+len_w = len(S_i_e.w)
+delay_i_e = (1 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_i_e = np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_i_e.w = wt_i_e
+S_i_e.delay = delay_i_e
+
 
  # connections from inhibitory population to inhibitory population.
 S_i_i = Synapses(nodes_i, nodes_i, model=eqs_stdp_ie, on_pre= eqs_STDP_pre_ie,  on_post = eqs_STDP_post_ie)
-S_i_i.connect('i !=j')  # all to all connections
-for j in range(0, 400):
-    pos_i_i = np.random.randint(0, 400, 40)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
-    delay_i_i = (5 * ms - 0 * ms) * np.random.random(40) + 0 * ms
-    wt_i_i =  (1 / 2.5) * np.random.rand(40)  # unformly distributed random numbers between 0 and 1
-    k = 0
-    for i in pos_i_i:
-        if (i == j):
-            i = i +1
-        S_i_e.w[i,j] = wt_i_i[k]  # weights have to be between 0 and 1
-        S_i_e.delay[i,j] = delay_i_i[k]
+S_i_i.connect(condition = 'i !=j', p = 0.1)  # all to all connections
+len_w = len(S_i_i.w)
+delay_i_i = (5 * ms - 0 * ms) * np.random.random(len_w) + 0 * ms
+wt_i_i = (1 / 2.5) * np.random.rand(len_w)        # unformly distributed random numbers between 0 and 1
+S_i_i.w = wt_i_i
+S_i_i.delay = delay_i_i
+
 
 # to record the spikes from the excitaory neurosn of computation population.
 spikedetector = SpikeMonitor(nodes_e)
