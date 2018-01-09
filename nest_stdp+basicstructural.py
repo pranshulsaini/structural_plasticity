@@ -154,7 +154,7 @@ class stdp_class:
         for j in range(0,1600):
             pos_inp_e =  np.random.randint(0,1600,160)  # assigns random 160 positions between [0 and 1599). Acts as a column of connection matrix
             for i in pos_inp_e:
-                self.wt_inp_e[i][j] = 200. * np.random.random()   # weights have to be between 0 and 1
+                self.wt_inp_e[i][j] = 100. * np.random.random()   # weights have to be between 0 and 1
         nest.Connect(self.nodes_inp, self.nodes_e, conn_spec = {'rule': 'all_to_all'}, syn_spec = {'model': 'stdp_synapse', 'weight': self.wt_inp_e , 'delay': 1.0, 'tau_plus': 15, 'Wmax':1.0})
 
 
@@ -163,7 +163,7 @@ class stdp_class:
         for j in range(0, 1600):
             pos_inp_i = np.random.randint(0, 400,40)  # assigns random 40 positions between [0 and 400). Acts as a column of connection matrix
             for i in pos_inp_i:
-                self.wt_inp_i[i][j] = 200. * (1./5)*np.random.random()  # weights have to be between 0 and 0.2
+                self.wt_inp_i[i][j] = 100. * (1./5)*np.random.random()  # weights have to be between 0 and 0.2
         nest.Connect(self.nodes_inp, self.nodes_i,conn_spec = {'rule': 'all_to_all'}, syn_spec = {'model': 'stdp_synapse', 'weight': self.wt_inp_i , 'delay': 1.0, 'tau_plus': 15, 'Wmax':0.2})
 
 
